@@ -47,12 +47,20 @@ and 2, run
    sh mit-clean.sh
 
 The first argument to mit-setup.sh was a choice of shared memory
-consensus mechanism.  The two choices are `mutex' and `interrupt': with
-`mutex', each unit of shared memory is protected by a mutex; with
-`interrupt', any access to shared memory is done while interrupts are
-disabled, which inhibits other threads from running.  The `interrupt'
-choice is safer because it also protects the data structures against
-`C-g'.
+consensus mechanism.  The choices are, in alphabetical order:
+
+. critical - Every SYNCHRONIZE operation, as well as others operations
+  such as SET-PLACEHOLDER!, is run with interrupts disabled.  This is
+  probably not what you want, because it inhibits other threads from
+  running for amounts of time linearly proportional to the size of the
+  rendezvous structure passed to SYNCHRONIZE.
+
+. interrupt - Each access to a shared object is done while interrupts
+  are disabled, which inhibits other threads from running.  This is
+  slightly safer than `mutex' because it also protects some data
+  structures against C-g.
+
+. mutex - Each shared object is protected by a mutex.
 
 [*] Actually, all that is necessary is runtime-{os2,unx,w32}.pkd in the
     runtime/ subdirectory of MIT Scheme's source tree.
