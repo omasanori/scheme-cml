@@ -1,0 +1,90 @@
+* Scheme-CML: Concurrent ML for Scheme                  -*- outline -*-
+
+This directory contains Scheme-CML, a Scheme implementation of John
+Reppy's Concurrent ML (CML) concurrency abstraction.  For more details
+on the original CML, see <http://cml.cs.uchicago.edu/>.
+
+This code is reasonably portable, but, being a concurrency abstraction,
+it relies on system-specific mechanisms for concurrency and consensus
+on shared memory.
+
+** Supported Schemes
+
+Scheme-CML has already been ported to several Schemes already.
+
+*** Scheme48
+
+To load Scheme-CML into Scheme48, load the files s48-interfaces.scm and
+s48-packages.scm into the config package.  See those files, and the
+interfaces RENDEZVOUS-INTERFACE and RENDEZVOUS-*-INTERFACE, for more
+details.
+
+*** MIT Scheme on Unix
+
+Loading Scheme-CML into MIT Scheme takes three steps, and requires a
+MIT Scheme source tree with MIT Scheme built[*]:
+
+1. Set up the directory by running
+
+      sh mit-setup.sh interrupt /path/to/mit-scheme/
+
+   The working directory must be the top-level Scheme-CML directory.
+
+2. Compile Scheme-CML by loading mit-compile.scm.  (The working
+   directory does not matter; mit-compile.scm uses the directory part
+   of the pathname that you used to load mit-compile.scm.)
+
+   At this point, you can check for some problems by looking in
+   mit-rendezvous-unx.crf, which should be empty.
+
+3. Load Scheme-CML by loading mit-load.scm.
+
+Then the (RENDEZVOUS) package will contain everything CML-related.  For
+more details, see mit-rendezvous.pkg.  If you want to clean out the
+generated files in the directory, reverting all the effects of Steps 1
+and 2, run
+
+   sh mit-clean.sh
+
+The first argument to mit-setup.sh was a choice of shared memory
+consensus mechanism.  The two choices are `mutex' and `interrupt': with
+`mutex', each unit of shared memory is protected by a mutex; with
+`interrupt', any access to shared memory is done while interrupts are
+disabled, which inhibits other threads from running.  The `interrupt'
+choice is safer because it also protects the data structures against
+`C-g'.
+
+[*] Actually all that is necessary is runtime-{os2,unx,w32}.pkd in the
+    src/runtime/ subdirectory of MIT Scheme's source tree.
+
+** Porting
+
+The full details of the parameters needed to support Scheme-CML are
+somewhat elaborate (and need to be written down more carefully), but
+most of the details can be ignored.  There are three basic parts to the
+parameters:
+
+- Miscellaneous gobbledigook.
+    (SPAWN <nullary-procedure> [<name>]) -> process
+    (SLEEP <millisecond-duration>)
+    (LIST-SORT! <predicate> <list>)
+    (COMPOSE-NULLARY <procedure> <nullary-procedure>)
+    (COMPOSE-UNARY <procedure> <unary-procedure>)
+
+- Critical sections and suspending & resuming threads.  See
+  mit-mutex-suspend.scm for a prototypical implementation.
+  [SIGNAL-THREAD-EVENT has the effect of resuming a suspended thread.]
+
+- Locked record access.  See s48-pessimistic-record.scm for a
+  prototypical implementation.
+
+** scm-rendezvous
+
+Scheme-CML exposes an interface identical to that of scm-rendezvous
+(with the addition of CHOOSING-RENDEZVOUS* -- a unary equivalent of
+CHOOSING-RENDEZVOUS, taking a list as its sole argument), but has a
+very different internal implementation, rewritten from scratch, and its
+internal interface to building rendezvous is completely different from
+that of scm-rendezvous.  Thus, any code using POLLING-RENDEZVOUS or any
+of the */CRITICAL procedures from scm-rendezvous will need to be
+rewritten.
