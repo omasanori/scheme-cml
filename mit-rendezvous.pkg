@@ -1,0 +1,137 @@
+;;; -*- Mode: Scheme -*-
+
+;;;; Concurrent ML for Scheme
+;;;; MIT Scheme: Packages
+
+;;; Copyright (c) 2009, Taylor R. Campbell
+;;;
+;;; Redistribution and use in source and binary forms, with or without
+;;; modification, are permitted provided that the following conditions
+;;; are met:
+;;;
+;;; * Redistributions of source code must retain the above copyright
+;;;   notice, this list of conditions and the following disclaimer.
+;;;
+;;; * Redistributions in binary form must reproduce the above copyright
+;;;   notice, this list of conditions and the following disclaimer in
+;;;   the documentation and/or other materials provided with the
+;;;   distribution.
+;;;
+;;; * Neither the names of the authors nor the names of contributors
+;;;   may be used to endorse or promote products derived from this
+;;;   software without specific prior written permission.
+;;;
+;;; THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS
+;;; OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;;; ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+;;; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+;;; DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+;;; GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+;;; WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+(global-definitions "mit-runtime")
+
+(define-package (rendezvous)
+  (parent ()))
+
+(define-package (rendezvous parameters)
+  (files "mit-etc" "mit-syntax" "mit-suspend")
+  (parent (rendezvous))
+  (import (runtime thread) thread/properties)
+  (export (rendezvous)
+          compose-nullary
+          compose-unary
+          define-locked-record-type
+          enter-critical-section
+          exit-critical-section
+          list-sort!
+          maybe-resume
+          sleep
+          spawn
+          suspend
+          ))
+
+(define-package (rendezvous primitive)
+  (files "primitive")
+  (parent (rendezvous))
+  (export (rendezvous)
+          make-prv
+          map-prv
+          primitive-poll
+          primitive-synchronize
+          prv?
+          ))
+
+(define-package (rendezvous rendezvous)
+  (files "rendezvous" "rendezvous-syntax" "mit-time")
+  (parent (rendezvous))
+  (export (rendezvous)
+          after-time-rendezvous
+          at-real-time-rendezvous
+          base-rendezvous
+          choosing-rendezvous
+          choosing-rendezvous*
+          delayed-rendezvous
+          delayed-rendezvous-with-nack
+          map-rendezvous
+          poll
+          quiescent-rendezvous
+          rendezvous-case
+          rendezvous?
+          synchronize
+          synchronize-chosen-rendezvous
+          synchronize-chosen-rendezvous/timeout
+          synchronize/timeout
+          thunk-rendezvous
+          values-rendezvous
+          ))
+
+(define-package (rendezvous channels)
+  (files "channel")
+  (parent (rendezvous))
+  (export (rendezvous)
+          channel-receive
+          channel-receive-rendezvous
+          channel-send
+          channel-send-rendezvous
+          channel?
+          make-channel
+          ))
+
+(define-package (rendezvous mailboxes)
+  (files "mailbox")
+  (parent (rendezvous))
+  (export (rendezvous)
+          mailbox-receive
+          mailbox-receive-rendezvous
+          mailbox-send
+          mailbox?
+          make-mailbox
+          ))
+
+(define-package (rendezvous placeholders)
+  (files "placeholder")
+  (parent (rendezvous))
+  (export (rendezvous)
+          make-placeholder
+          placeholder-value
+          placeholder-value-rendezvous
+          placeholder?
+          set-placeholder!
+          ))
+
+(define-package (rendezvous semaphores)
+  (files "semaphore")
+  (parent (rendezvous))
+  (export (rendezvous)
+          make-semaphore
+          semaphore-acquire
+          semaphore-acquire-rendezvous
+          semaphore-release
+          semaphore-value
+          semaphore?
+          ))
