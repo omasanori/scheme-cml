@@ -4,7 +4,8 @@ OS_TYPES="unx w32 os2"
 PKG_SUFFIXES="crf fre pkd"
 SCM_SUFFIXES="bin ext com bci"
 SCHEME_FILES="mit-etc mit-syntax mit-suspend primitive rendezvous mit-time"
-SCHEME_FILES="${FILES} rendezvous-syntax channel mailbox placeholder semaphore"
+SCHEME_FILES="${SCHEME_FILES} channel mailbox placeholder semaphore"
+SCHEME_FILES="${SCHEME_FILES} rendezvous-syntax"
 GENERATED_FILES="mit-syntax.scm mit-suspend.scm"
 
 begin_delete ()
