@@ -87,6 +87,13 @@ parameters:
 - Timer rendezvous.  See mit-time.scm and s48-time.scm for prototypical
   implementations.
 
+Additionally, Scheme-CML code uses the following SRFIs:
+
+SRFI 1: List Library
+SRFI 8: RECEIVE
+SRFI 9: DEFINE-RECORD-TYPE
+SRFI 23: ERROR
+
 ** scm-rendezvous
 
 Scheme-CML exposes an interface identical to that of scm-rendezvous
