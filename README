@@ -61,7 +61,7 @@ choice is safer because it also protects the data structures against
 
 The full details of the parameters needed to support Scheme-CML are
 somewhat elaborate (and need to be written down more carefully), but
-most of the details can be ignored.  There are three basic parts to the
+most of the details can be ignored.  There are five basic parts to the
 parameters:
 
 - Miscellaneous gobbledigook.
@@ -71,12 +71,21 @@ parameters:
     (COMPOSE-NULLARY <procedure> <nullary-procedure>)
     (COMPOSE-UNARY <procedure> <unary-procedure>)
 
+- Queues:
+    (MAKE-QUEUE)
+    (QUEUE-EMPTY? <queue>)
+    (ENQUEUE! <queue> <element>)
+    (DEQUEUE! <queue>) -> element
+
 - Critical sections and suspending & resuming threads.  See
   mit-mutex-suspend.scm for a prototypical implementation.
   [SIGNAL-THREAD-EVENT has the effect of resuming a suspended thread.]
 
 - Locked record access.  See s48-pessimistic-record.scm for a
   prototypical implementation.
+
+- Timer rendezvous.  See mit-time.scm and s48-time.scm for prototypical
+  implementations.
 
 ** scm-rendezvous
 
