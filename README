@@ -26,7 +26,7 @@ MIT Scheme source tree with MIT Scheme built[*]:
 
 1. Set up the directory by running
 
-      sh mit-setup.sh interrupt /path/to/mit-scheme/
+      sh mit-setup.sh interrupt /path/to/mit-scheme/src/
 
    The working directory must be the top-level Scheme-CML directory.
 
@@ -54,8 +54,8 @@ disabled, which inhibits other threads from running.  The `interrupt'
 choice is safer because it also protects the data structures against
 `C-g'.
 
-[*] Actually all that is necessary is runtime-{os2,unx,w32}.pkd in the
-    src/runtime/ subdirectory of MIT Scheme's source tree.
+[*] Actually, all that is necessary is runtime-{os2,unx,w32}.pkd in the
+    runtime/ subdirectory of MIT Scheme's source tree.
 
 ** Porting
 
