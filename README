@@ -75,13 +75,12 @@ parameters:
 - Miscellaneous gobbledigook.
     (SPAWN <nullary-procedure> [<name>]) -> process
     (SLEEP <millisecond-duration>)
-    (LIST-SORT! <predicate> <list>)
-    (COMPOSE-NULLARY <procedure> <nullary-procedure>)
-    (COMPOSE-UNARY <procedure> <unary-procedure>)
+    (COMPOSE-NULLARY <procedure> <nullary-procedure>) -> procedure
+    (COMPOSE-UNARY <procedure> <unary-procedure>) -> procedure
 
 - Queues:
-    (MAKE-QUEUE)
-    (QUEUE-EMPTY? <queue>)
+    (MAKE-QUEUE) -> queue
+    (QUEUE-EMPTY? <queue>) -> boolean
     (ENQUEUE! <queue> <element>)
     (DEQUEUE! <queue>) -> element
 
@@ -101,6 +100,7 @@ SRFI 1: List Library
 SRFI 8: RECEIVE
 SRFI 9: DEFINE-RECORD-TYPE
 SRFI 23: ERROR
+SRFI 32: Sort Libraries (only LIST-SORT!)
 
 ** scm-rendezvous
 
