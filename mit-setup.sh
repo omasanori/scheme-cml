@@ -5,8 +5,9 @@ set -e
 usage ()
 {
   printf 'Usage: %s [mutex|interrupt] /path/to/mit-scheme/src\n' "${0}"
-  printf '  /path/to/mit-scheme/src must contain a build of MIT Scheme.\n'
-  printf '  Current directory must be the rendezvous source directory.\n'
+  printf '  /path/to/mit-scheme/src must contain a build of MIT Scheme,\n'
+  printf '    in which runtime/runtime-{os2,unx,w32}.pkd must exist.\n'
+  printf '  Current directory must be the Scheme-CML source directory.\n'
   exit 1
 }
 
