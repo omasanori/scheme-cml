@@ -1,6 +1,6 @@
 ;;; -*- Mode: Scheme -*-
 
-;;;; Rendezvous Concurrency Abstraction
+;;;; Concurrent ML for Scheme
 ;;;; Semaphore Example
 
 ;;; Copyright (c) 2005-2009, Taylor R. Campbell
