@@ -43,14 +43,14 @@
        (field field-accessors ...)
        ...)
      (BEGIN
-       (DEFINE-RECORD-TYPE name name
+       (DEFINE-RECORD-TYPE name
            (constructor constructor-field ...)
            predicate
          (field field-accessors ...)
          ...)
        (DEFINE-INTEGRABLE (with-locked-object OBJECT PROCEDURE)
          (IF (NOT (= INTERRUPT-MASK/GC-OK
-                     (FIX:OR INTERRUPT-MASK/GC-OK (ENABLED-INTERRUPTS))))
+                     (FIX:OR INTERRUPT-MASK/GC-OK (GET-INTERRUPT-ENABLES))))
              (ERROR "Locked outside of critical section:"
                     `(with-locked-object ,OBJECT ,PROCEDURE)))
          (PROCEDURE))))))
