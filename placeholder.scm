@@ -73,7 +73,13 @@
 
   (define enabled-thunk
     (lambda ()
-      (placeholder.waiters-then-value placeholder)))
+      ;; Locking it isn't really necessary here: nobody will ever write
+      ;; to it by the time that this thunk is called.  However, the
+      ;; locked record type abstraction may require that any read from
+      ;; or write to this field be done with the placeholder locked.
+      (with-placeholder-locked placeholder
+        (lambda ()
+          (placeholder.waiters-then-value placeholder)))))
 
   (define (poll)
     (with-placeholder-locked placeholder
