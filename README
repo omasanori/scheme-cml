@@ -49,12 +49,6 @@ and 2, run
 The first argument to mit-setup.sh was a choice of shared memory
 consensus mechanism.  The choices are, in alphabetical order:
 
-. critical - Every SYNCHRONIZE operation, as well as others operations
-  such as SET-PLACEHOLDER!, is run with interrupts disabled.  This is
-  probably not what you want, because it inhibits other threads from
-  running for amounts of time linearly proportional to the size of the
-  rendezvous structure passed to SYNCHRONIZE.
-
 . interrupt - Each access to a shared object is done while interrupts
   are disabled, which inhibits other threads from running.  This is
   slightly safer than `mutex' because it also protects some data

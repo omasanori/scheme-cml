@@ -6,7 +6,7 @@ usage ()
 {
   printf 'Usage: %s <mechanism> /path/to/mit-scheme/src\n' "${0}"
   printf '  <mechanism> is the atomicity mechanism; it can be any of:\n'
-  printf '    critical interrupt mutex\n'
+  printf '    interrupt mutex\n'
   printf '  /path/to/mit-scheme/src must contain a build of MIT Scheme,\n'
   printf '    in which runtime/runtime-{os2,unx,w32}.pkd must exist.\n'
   printf '  Current directory must be the Scheme-CML source directory.\n'
@@ -26,7 +26,7 @@ MIT_SRC="${2}"
 OS_TYPES="unx w32 os2"
 
 case "${TYPE}" in
-  critical|interrupt|mutex)
+  interrupt|mutex)
     ;;
   *)
     usage
