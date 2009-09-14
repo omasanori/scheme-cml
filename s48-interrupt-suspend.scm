@@ -32,39 +32,6 @@
 ;;; WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 ;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-(define-record-type <suspension>
-    (make-suspension token composition)
-    suspension?
-  (token suspension.token)
-  (composition suspension.composition))
-
-(define-record-type <suspension-token>
-    (%make-suspension-token locked? cell-then-thunk uid)
-    suspension-token?
-  (locked? suspension-token.locked? set-suspension-token.locked?!)
-  (cell-then-thunk suspension-token.cell-then-thunk
-                   set-suspension-token.cell-then-thunk!)
-  (uid suspension-token.uid))
-
-(define (make-suspension-token)
-  (%make-suspension-token #f
-                          (make-cell (current-thread))
-                          (new-suspension-uid)))
-
-(define *suspension-uid* 0)
-
-(define (new-suspension-uid)
-  (with-interrupts-inhibited
-    (lambda ()
-      (let ((uid *suspension-uid*))
-        (set! *suspension-uid* (+ uid 1))
-        uid))))
-
-(define (reset-suspension-uid)
-  (with-interrupts-inhibited
-    (lambda ()
-      (set! *suspension-uid* 0))))
 
 (define (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
@@ -73,91 +40,70 @@
   critical-token                        ;ignore
   (continuation))
 
-(define (suspend critical-token procedure)
-  critical-token                        ;ignore
-  (let ((token (make-suspension-token)))
-    (set-suspension-token.locked?! token #t)
-    (procedure
-     (lambda (composition)
-       (make-suspension token composition))
-     (lambda ()
-       (let ((cell (suspension-token.cell-then-thunk token)))
-         (let loop ()
-           ;; Atomically unlock the token and block.
-           (with-interrupts-inhibited
-             (lambda ()
-               (set-suspension-token.locked?! token #f)
-               (block cell)))
-           (let spin ()
-             ((with-interrupts-inhibited
-                (lambda ()
-                  (let ((cell-then-thunk
-                         (suspension-token.cell-then-thunk token)))
-                    (cond ((suspension-token.locked? token)
-                           (relinquish-timeslice)
-                           spin)
-                          ((cell? cell-then-thunk)
-                           (set-suspension-token.locked?! token #t)
-                           loop)
-                          (else
-                           cell-then-thunk))))))))))
-     (lambda (continuation)
-       (continuation)))))
+(define-record-type <suspender>
+    (%make-suspender cell locked? set? value)
+    suspender?
+  (cell suspender.cell)
+  (locked? suspender.locked? set-suspender.locked?!)
+  (set? suspender.set? set-suspender.set?!)
+  (value suspender.value set-suspender.value!))
 
-(define (maybe-resume suspension thunk)
-  (let ((token (suspension.token suspension)))
+(define (make-suspender)
+  (%make-suspender (make-cell (current-thread)) #f #f #f))
+
+(define (suspender/lock suspender)
+  (let spin ()
+    (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+      (if (suspender.locked? suspender)
+          (begin
+            (set-enabled-interrupts! interrupts)
+            (relinquish-timeslice)
+            (spin))
+          (begin
+            (set-suspender.locked?! suspender #t)
+            (set-enabled-interrupts! interrupts))))))
+
+(define (suspender/unlock suspender)
+  ;; Disabling interrupts here is probably superfluous.
+  (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+    (set-suspender.locked?! suspender #f)
+    (set-enabled-interrupts! interrupts)))
+
+(define (suspender/resumed? suspender)
+  (suspender.set? suspender))
+
+(define (suspender/resume suspender value)
+  (set-suspender.set?! suspender #t)
+  (set-suspender.value! suspender value)
+  (make-ready (suspender.cell suspender)))
+
+(define (suspender/suspend critical-token suspender)
+  critical-token                        ;ignore
+  ;; Interrupts are disabled on entry to LOOP so that the action of
+  ;; unlocking the suspender and blocking the thread is atomic.
+  (set-enabled-interrupts! no-interrupts)
+  (let loop ()
+    (set-suspender.locked?! suspender #f)
+    ;; BLOCK enables interrupts when it returns.
+    (block (suspender.cell suspender))
     (let spin ()
-      (let* ((interrupts (set-enabled-interrupts! no-interrupts))
-             (cell-then-thunk (suspension-token.cell-then-thunk token)))
-        (cond ((suspension-token.locked? token)
+      (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+        (cond ((suspender.locked? suspender)
                (set-enabled-interrupts! interrupts)
                (relinquish-timeslice)
                (spin))
-              ((cell? cell-then-thunk)
-               (set-suspension-token.cell-then-thunk!
-                token
-                (let ((composition (suspension.composition suspension)))
-                  (lambda ()
-                    (composition thunk))))
-               (set-enabled-interrupts! interrupts)
-               (make-ready cell-then-thunk))
+              ((suspender.set? suspender)
+               (let ((value (suspender.value suspender)))
+                 (set-suspender.value! suspender #f)
+                 (set-enabled-interrupts! interrupts)
+                 value))
               (else
-               (set-enabled-interrupts! interrupts)
-               #f))))))
+               (set-suspender.locked?! suspender #t)
+               ;; Leave interrupts disabled when entering LOOP.  It
+               ;; doesn't matter that we forget what they were -- BLOCK
+               ;; knows what to do.
+               (loop)))))))
 
-(define (with-suspension-claimed suspension if-claimed if-not-claimed)
-  ((let ((token (suspension.token suspension)))
-     (let spin ()
-       (let* ((interrupts (set-enabled-interrupts! no-interrupts))
-              (cell-then-thunk (suspension-token.cell-then-thunk token)))
-         (cond ((suspension-token.locked? token)
-                ;++ Should this be ALL-INTERRUPTS, rather than INTERRUPTS?
-                (set-enabled-interrupts! interrupts)
-                (relinquish-timeslice)
-                (spin))
-               ((cell? cell-then-thunk)
-                (set-suspension-token.locked?! token #t)
-                (set-enabled-interrupts! interrupts)
-                (lambda ()
-                  (if-claimed
-                   (let ((composition (suspension.composition suspension)))
-                     (lambda (thunk)
-                       (with-interrupts-inhibited
-                         (lambda ()
-                           (set-suspension-token.locked?! token #f)
-                           (set-suspension-token.cell-then-thunk!
-                            token
-                            (lambda ()
-                              (composition thunk)))))
-                       (make-ready cell-then-thunk)))
-                   (lambda ()
-                     (with-interrupts-inhibited
-                       (lambda ()
-                         (set-suspension-token.locked?! token #f)))))))
-               (else
-                (set-enabled-interrupts! interrupts)
-                if-not-claimed)))))))
-
 (define (block cell)
   (with-new-proposal (retry)
     (if (not (maybe-commit-and-block cell))
