@@ -50,15 +50,6 @@
 
 (define (channel-receive channel)
   (synchronize (channel-receive-rendezvous channel)))
-
-(define (poll-channel channel queue-accessor)
-  (with-channel-locked channel
-    (lambda ()
-      (if (queue-empty? (queue-accessor channel))
-          (let ((priority (channel.priority channel)))
-            (set-channel.priority! channel (+ priority 1))
-            priority)
-          #f))))
 
 (define (channel-rendezvous channel enqueue-accessor dequeue-accessor
                             waiter->suspension resumer waiter->enabler
