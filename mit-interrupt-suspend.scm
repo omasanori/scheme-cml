@@ -35,37 +35,6 @@
 
 (declare (usual-integrations))
 
-(define-record-type <suspension>
-    (make-suspension token composition)
-    suspension?
-  (token suspension.token)
-  (composition suspension.composition))
-
-(define-record-type <suspension-token>
-    (%make-suspension-token thread-then-thunk uid)
-    suspension-token?
-  (thread-then-thunk suspension-token.thread-then-thunk
-                     set-suspension-token.thread-then-thunk!)
-  (uid suspension-token.uid))
-
-(define (make-suspension-token)
-  (%make-suspension-token (current-thread)
-                          (new-suspension-uid)))
-
-(define *suspension-uid* 0)
-
-(define (new-suspension-uid)
-  (without-interrupts
-    (lambda ()
-      (let ((uid *suspension-uid*))
-        (set! *suspension-uid* (+ uid 1))
-        uid))))
-
-(define (reset-suspension-uid)
-  (without-interrupts
-    (lambda ()
-      (set! *suspension-uid* 0))))
-
 (define-integrable (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
 
@@ -73,81 +42,59 @@
   critical-token                        ;ignore
   (continuation))
 
-(define (suspend critical-token procedure)
-  critical-token                        ;ignore
-  (let ((token (make-suspension-token)))
-    ((with-thread-events-blocked
-       (lambda ()
-         (procedure
-          (lambda (composition)
-            (make-suspension token composition))
-          (lambda ()
-            (let loop ()
-              (suspend-current-thread)
-              ((without-interrupts
-                 (lambda ()
-                   (let ((thread-then-thunk
-                          (suspension-token.thread-then-thunk token)))
-                     (if (thread? thread-then-thunk)
-                         ;; SUSPEND-THREAD-EVENT unblocks thread
-                         ;; events, but before we exit the region
-                         ;; without interrupts, we need thread events
-                         ;; to be blocked until we resuspend.
-                         (begin (block-thread-events) loop)
-                         (lambda () thread-then-thunk))))))))
-          (lambda (continuation)
-            continuation)))))))
-
-(define (with-suspension-claimed suspension if-claimed if-not-claimed)
-  (let ((token (suspension.token suspension)))
-    (let spin ()
-      (let* ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok))
-             (thread-then-thunk (suspension-token.thread-then-thunk token)))
-        (cond ((eq? thread-then-thunk #f)
-               (set-interrupt-enables! interrupt-mask)
-               (yield-current-thread)
-               (spin))
-              ((thread? thread-then-thunk)
-               (set-suspension-token.thread-then-thunk! token #f)
-               (set-interrupt-enables! interrupt-mask)
-               (if-claimed
-                (let ((composition (suspension.composition suspension)))
-                  (lambda (thunk)
-                    (without-interrupts
-                      (lambda ()
-                        (set-suspension-token.thread-then-thunk!
-                         token
-                         (lambda ()
-                           (composition thunk)))))
-                    (signal-thread-event thread-then-thunk #t)))
-                (lambda ()
-                  (without-interrupts
-                    (lambda ()
-                      (set-suspension-token.thread-then-thunk!
-                       token
-                       thread-then-thunk))))))
-              (else
-               (set-interrupt-enables! interrupt-mask)
-               (if-not-claimed)))))))
+(define-record-type <suspender>
+    (%make-suspender thread locked? set? value)
+    suspender?
+  (thread suspender.thread)
+  (locked? suspender.locked? set-suspender.locked?!)
+  (set? suspender.set? set-suspender.set?!)
+  (value suspender.value set-suspender.value!))
 
-(define (maybe-resume suspension thunk)
-  (let ((token (suspension.token suspension)))
-    (let spin ()
-      (let* ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok))
-             (thread-then-thunk (suspension-token.thread-then-thunk token)))
-        (cond ((eq? thread-then-thunk #f)
+(define (make-suspender)
+  (%make-suspender (current-thread) #f #f #f))
+
+(define (suspender/lock suspender)
+  (let spin ()
+    (let ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok)))
+      (if (suspender.locked? suspender)
+          (begin
+            (set-interrupt-enables! interrupt-mask)
+            (yield-current-thread)
+            (spin))
+          (begin
+            (set-suspender.locked?! suspender #t)
+            (set-interrupt-enables! interrupt-mask))))))
+
+(define (suspender/unlock suspender)
+  ;; Disabling interrupts here is probably superfluous.
+  (let ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok)))
+    (set-suspender.locked?! suspender #f)
+    (set-interrupt-enables! interrupt-mask)))
+
+(define (suspender/resumed? suspender)
+  (suspender.set? suspender))
+
+(define (suspender/resume suspender value)
+  (set-suspender.set?! suspender #t)
+  (set-suspender.value! suspender value)
+  (signal-thread-event (suspender.thread suspender) #t))
+
+(define (suspender/suspend critical-token suspender)
+  critical-token                        ;ignore
+  (let loop ()
+    (let ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok)))
+      (set-suspender.locked?! suspender #f)
+      (suspend-current-thread)
+      (let spin ()
+        (cond ((suspender.locked? suspender)
                (set-interrupt-enables! interrupt-mask)
                (yield-current-thread)
                (spin))
-              ((thread? thread-then-thunk)
-               (set-suspension-token.thread-then-thunk!
-                token
-                (let ((composition (suspension.composition suspension)))
-                  (lambda ()
-                    (composition thunk))))
-               (set-interrupt-enables! interrupt-mask)
-               (signal-thread-event thread-then-thunk #t)
-               #t)
+              ((suspender.set? suspender)
+               (let ((value (suspender.value suspender)))
+                 (set-suspender.value! suspender #f)
+                 (set-interrupt-enables! interrupt-mask)
+                 value))
               (else
                (set-interrupt-enables! interrupt-mask)
-               #f))))))
+               (loop)))))))
