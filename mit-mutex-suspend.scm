@@ -42,12 +42,17 @@
   (composition suspension.composition))
 
 (define-record-type <suspension-token>
-    (make-suspension-token mutex thread-then-thunk uid)
+    (%make-suspension-token mutex thread-then-thunk uid)
     suspension-token?
   (mutex suspension-token.mutex set-suspension-token.mutex!)
   (thread-then-thunk suspension-token.thread-then-thunk
                      set-suspension-token.thread-then-thunk!)
   (uid suspension-token.uid))
+
+(define (make-suspension-token)
+  (%make-suspension-token (make-thread-mutex)
+                          (current-thread)
+                          (new-suspension-uid)))
 
 (define *suspension-uid* 0)
 (define suspension-uid-mutex (make-thread-mutex))
@@ -73,40 +78,60 @@
 
 (define (suspend critical-token procedure)
   critical-token                        ;ignore
-  (let ((token
-         (make-suspension-token (make-thread-mutex)
-                                (current-thread)
-                                (new-suspension-uid))))
-    (procedure
-     (lambda (composition)
-       (make-suspension token composition))
-     (lambda ()
-       (let loop ()
-         (suspend-current-thread)
-         ((with-thread-mutex-locked (suspension-token.mutex token)
-            (lambda ()
+  (let ((token (make-suspension-token)))
+    ((with-thread-mutex-locked (suspension-token.mutex token)
+       (lambda ()
+         (procedure
+          (lambda (composition)
+            (make-suspension token composition))
+          (lambda ()
+            (let loop ()
+              ;; Blocking thread events makes unlock-and-suspend atomic.
+              (with-thread-events-blocked
+                (lambda ()
+                  (unlock-thread-mutex (suspension-token.mutex token))
+                  (suspend-current-thread)))
+              (lock-thread-mutex (suspension-token.mutex token))
               (let ((thread-then-thunk
                      (suspension-token.thread-then-thunk token)))
                 (if (thread? thread-then-thunk)
-                    loop
-                    thread-then-thunk)))))))
-     (lambda (continuation)
-       (continuation)))))
+                    (loop)
+                    thread-then-thunk))))
+          (lambda (continuation)
+            continuation)))))))
 
 (define (maybe-resume suspension thunk)
   (let ((token (suspension.token suspension)))
-    ((with-thread-mutex-locked (suspension-token.mutex token)
-       (lambda ()
-         (let ((thread-then-thunk (suspension-token.thread-then-thunk token)))
-           (if (thread? thread-then-thunk)
-               (begin
-                 (set-suspension-token.thread-then-thunk!
-                  token
-                  (let ((composition (suspension.composition suspension)))
-                    (lambda ()
-                      (composition thunk))))
-                 (lambda ()
-                   (signal-thread-event thread-then-thunk #t)
-                   #t))
-               (lambda ()
-                 #f))))))))
+    (with-thread-mutex-locked (suspension-token.mutex token)
+      (lambda ()
+        (let ((thread-then-thunk (suspension-token.thread-then-thunk token)))
+          (if (thread? thread-then-thunk)
+              (begin
+                (set-suspension-token.thread-then-thunk!
+                 token
+                 (let ((composition (suspension.composition suspension)))
+                   (lambda ()
+                     (composition thunk))))
+                (signal-thread-event thread-then-thunk #t)
+                #t)
+              #f))))))
+
+(define (with-suspension-claimed suspension if-claimed if-not-claimed)
+  (let ((token (suspension.token suspension)))
+    (lock-thread-mutex (suspension-token.mutex token))
+    (let ((thread-then-thunk (suspension-token.thread-then-thunk token)))
+      (if (thread? thread-then-thunk)
+          (if-claimed
+           (let ((composition (suspension.composition suspension)))
+             (lambda (thunk)
+               (set-suspension-token.thread-then-thunk!
+                token
+                (lambda ()
+                  (composition thunk)))
+               (signal-thread-event thread-then-thunk #t)
+               (unlock-thread-mutex (suspension-token.mutex token))))
+           (lambda ()
+             (unlock-thread-mutex (suspension-token.mutex token))))
+          (begin
+            (unlock-thread-mutex (suspension-token.mutex token))
+            (if-not-claimed))))))
