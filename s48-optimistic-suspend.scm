@@ -33,149 +33,82 @@
 ;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(define-record-type <suspension>
-    (make-suspension token composition)
-    suspension?
-  (token suspension.token)
-  (composition suspension.composition))
-
-(define-synchronized-record-type suspension-token <suspension-token>
-    (%make-suspension-token locked? cell-then-thunk uid)
-    (locked? cell-then-thunk)
-    suspension-token?
-  (locked? suspension-token.locked? set-suspension-token.locked?!)
-  (cell-then-thunk suspension-token.cell-then-thunk
-                   set-suspension-token.cell-then-thunk!)
-  (uid suspension-token.uid))
-
-(define (make-suspension-token)
-  (%make-suspension-token #f
-                          (make-cell (current-thread))
-                          (new-suspension-uid)))
-
-(define suspension-uid-cell (make-cell 0))
-
-(define (new-suspension-uid)
-  (call-ensuring-atomicity
-    (lambda ()
-      (let ((uid (provisional-cell-ref suspension-uid-cell)))
-        (provisional-cell-set! suspension-uid-cell (+ uid 1))
-        uid))))
-
-(define (reset-suspension-uid)
-  (call-ensuring-atomicity
-    (lambda ()
-      (provisional-cell-set! suspension-uid-cell 0))))
-
 (define (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
 
 (define (exit-critical-section critical-token continuation)
   critical-token                        ;ignore
   (continuation))
-
-(define (suspend critical-token procedure)
-  critical-token                        ;ignore
-  (let ((token (make-suspension-token)))
-    (set-suspension-token.locked?! token #t)
-    (procedure
-     (lambda (composition)
-       (make-suspension token composition))
-     (lambda ()
-       (let ((cell (suspension-token.cell-then-thunk token)))
-         (let loop ()
-           (with-new-proposal (retry)
-             (set-suspension-token.locked?! token #f)
-             (if (not (maybe-commit-and-block cell))
-                 (retry)))
-           ((with-new-proposal (retry)
-              (let ((cell-then-thunk (suspension-token.cell-then-thunk token)))
-                (cond ((suspension-token.locked? token)
-                       ;; Spin.
-                       (relinquish-timeslice)
-                       (retry))
-                      ((cell? cell-then-thunk)
-                       (set-suspension-token.locked?! token #t)
-                       (if (maybe-commit) loop (retry)))
-                      (else
-                       (if (maybe-commit) cell-then-thunk (retry))))))))))
-     (lambda (continuation)
-       (continuation)))))
 
-(define (maybe-resume suspension thunk)
+(define-synchronized-record-type suspender <suspsender>
+    (%make-suspender cell locked? set? value)
+    (locked? set? value)
+    suspender?
+  (cell suspender.cell)
+  (locked? suspender.locked? set-suspender.locked?!)
+  (set? suspender.set? set-suspender.set?!)
+  (value suspender.value set-suspender.value!))
+
+(define (make-suspender)
+  (%make-suspender (make-cell (current-thread)) #f #f #f))
+
+(define (suspender/lock suspender)
+  (call-ensuring-atomicity!
+    (lambda ()
+      (if (suspender.locked? suspender)
+          ;; Spin the transaction.
+          (begin
+            (invalidate-current-proposal!)
+            (relinquish-timeslice))
+          (set-suspender.locked?! suspender #t)))))
+
+(define (suspender/unlock suspender)
+  ;; Ensuring atomicity here is probably superfluous.
+  (call-ensuring-atomicity!
+    (lambda ()
+      (set-suspender.locked?! suspender #f))))
+
+(define (suspender/resumed? suspender)
+  (suspender.set? suspender))
+
+(define (suspender/resume suspender value)
   (error-if-current-proposal)
-  (let ((token (suspension.token suspension)))
-    (with-new-proposal (retry)
-      ;; Read CELL-THEN-THUNK first, because that is set only once: if
-      ;; it has been set to a thunk, then the lock state won't ever
-      ;; change.  If we read the lock state first, but after we read
-      ;; lock state someone else claims the suspension without resuming
-      ;; it yet, we might think that we can claim it when we can't.
-      (let ((cell-then-thunk (suspension-token.cell-then-thunk token)))
-        (cond ((suspension-token.locked? token)
-               ;; Spin the transaction.  We don't need to invalidate
-               ;; the current proposal because we can elide the attempt
-               ;; to commit it altogether.
-               (relinquish-timeslice)
-               (retry))
-              ((cell? cell-then-thunk)
-               (set-suspension-token.cell-then-thunk!
-                token
-                (let ((composition (suspension.composition suspension)))
-                  (lambda ()
-                    (composition thunk))))
-               (if (maybe-commit-and-make-ready (cell-ref cell-then-thunk))
-                   #t
-                   (retry)))
-              (else
-               (if (maybe-commit)
-                   #f
-                   (retry))))))))
-
-;;; Multiprocessor improvement to all this nonsense: Record the owner
-;;; of the suspension token's lock: if it is on another processor,
-;;; don't relinquish our time slice on this processor; just spin.
+  (set-suspender.set?! suspender #t)
+  (set-suspender.value! suspender value)
+  (with-new-proposal (retry)
+    (if (not
+         (maybe-commit-and-make-ready (cell-ref (suspender.cell suspender))))
+        (retry))))
 
-(define (with-suspension-claimed suspension if-claimed if-not-claimed)
-  (let ((token (suspension.token suspension)))
-    ((call-ensuring-atomicity
-       (lambda ()
-         (let ((cell-then-thunk (suspension-token.cell-then-thunk token)))
-           (cond ((suspension-token.locked? token)
-                  ;; Someone else has claimed this suspension, but has
-                  ;; not yet decided whether to use it.  Spin the
-                  ;; transaction until a decision is made.
-                  (invalidate-current-proposal!)
-                  (relinquish-timeslice)
-                  ;; Arbitrarily say that we couldn't claim it.
-                  ;; Whatever is computed in the transaction later, it
-                  ;; will fail to commit its proposal anyway, and have
-                  ;; to restart.  However, it would be nice if
-                  ;; INVALIDATE-CURRENT-PROPOSAL! actually threw out of
-                  ;; the transaction so that no such arbitrary decision
-                  ;; would be necessary.
-                  if-not-claimed)
-                 ((cell? cell-then-thunk)
-                  (set-suspension-token.locked?! token #t)
-                  (lambda ()
-                    (if-claimed
-                     (let ((composition (suspension.composition suspension))
-                           (thread (cell-ref cell-then-thunk)))
-                       (lambda (thunk)
-                         (error-if-current-proposal)
-                         (with-new-proposal (retry)
-                           (set-suspension-token.locked?! token #f)
-                           (set-suspension-token.cell-then-thunk!
-                            token
-                            (lambda ()
-                              (composition thunk)))
-                           (if (not (maybe-commit-and-make-ready thread))
-                               (retry)))))
-                     (lambda ()
-                       (set-suspension-token.locked?! token #f)))))
-                 (else
-                  if-not-claimed))))))))
+(define (suspender/suspend critical-token suspender)
+  critical-token                        ;ignore
+  (error-if-current-proposal)
+  (let loop ()
+    (with-new-proposal (retry)
+      (set-suspender.locked?! suspender #f)
+      (if (not (maybe-commit-and-block (suspender.cell suspender)))
+          (retry)))
+    ((with-new-proposal (retry)
+       (cond ((suspender.locked? suspender)
+              ;; Spin the transaction.  Invalidating the proposal is
+              ;; not necessary -- we can just discard it altogether.
+              ;; On a multiprocessor system, we ought instead to record
+              ;; who owns the lock, and to relinquish our time slice
+              ;; only if the owner is on the same processor.
+              (relinquish-timeslice)
+              (retry))
+             ((suspender.set? suspender)
+              (let ((value (suspender.value suspender)))
+                (set-suspender.value! suspender #f)
+                (if (maybe-commit)
+                    (lambda () value)
+                    (retry))))
+             (else
+              (set-suspender.locked?! suspender #t)
+              (if (maybe-commit)
+                  loop
+                  (retry))))))))
 
 (define (error-if-current-proposal)
   (if (current-proposal)
-      (error "I can't resume a process while I'm in a transaction.")))
+      (error "I am about to perform an action that cannot be rolled back!")))

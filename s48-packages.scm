@@ -118,14 +118,12 @@
 ;;;; Parameters
 
 (define-structures ((critical-sections/optimistic critical-sections-interface)
-                    (suspension/optimistic suspension-interface)
-                    (resumption/optimistic resumption-interface))
+                    (suspenders/optimistic suspenders-interface))
   (open scheme
         cells
         ;; CURRENT-PROPOSAL is used only for sanity checks.
         (subset low-proposals (current-proposal))
         proposals
-        srfi-9                          ;define-record-type
         srfi-23                         ;error
         threads
         threads-internal
@@ -189,8 +187,7 @@
 ;++ This is pretty kludgerific.
 
 (def critical-sections critical-sections/optimistic)
-(def suspension suspension/optimistic)
-(def resumption resumption/optimistic)
+(def suspenders suspenders/optimistic)
 (def locked-record-types locked-record-types/optimistic)
 
 ;; (def critical-sections critical-sections/pessimistic)
