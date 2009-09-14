@@ -49,11 +49,14 @@
           enter-critical-section
           exit-critical-section
           list-sort!
-          maybe-resume
+          make-suspender
           sleep
           spawn
-          suspend
-          with-suspension-claimed
+          suspender/lock
+          suspender/resume
+          suspender/resumed?
+          suspender/suspend
+          suspender/unlock
           ))
 
 (define-package (rendezvous primitive)
@@ -62,9 +65,11 @@
   (export (rendezvous)
           make-prv
           map-prv
+          maybe-resume
           primitive-poll
           primitive-synchronize
           prv?
+          with-suspension-claimed
           ))
 
 (define-package (rendezvous rendezvous)
