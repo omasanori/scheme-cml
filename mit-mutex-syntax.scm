@@ -40,13 +40,14 @@
    (lambda (form rename compare)
      rename compare                     ;ignore
      `(,(rename '%DEFINE-LOCKED-RECORD-TYPE)
+       ,(generate-uninterned-symbol (symbol-name 'CONSTRUCTOR))
        ,(generate-uninterned-symbol (symbol-name 'MUTEX))
        ,(generate-uninterned-symbol (symbol-name 'MUTEX-ACCESSOR))
        ,@(cdr form)))))
 
 (define-syntax %define-locked-record-type
   (syntax-rules ()
-    ((%DEFINE-LOCKED-RECORD-TYPE mutex-field mutex-accessor name
+    ((%DEFINE-LOCKED-RECORD-TYPE %constructor mutex-field mutex-accessor name
          (constructor constructor-field ...)
          (locked-field ...)
          predicate
@@ -55,13 +56,13 @@
        ...)
      (BEGIN
        (DEFINE-RECORD-TYPE name
-           (%CONSTRUCTOR mutex-field constructor-field ...)
+           (%constructor mutex-field constructor-field ...)
            predicate
          (mutex-field mutex-accessor)
          (field field-accessors ...)
          ...)
        (DEFINE (constructor constructor-field ...)
-         (%CONSTRUCTOR (MAKE-THREAD-MUTEX) constructor-field ...))
+         (%constructor (MAKE-THREAD-MUTEX) constructor-field ...))
        (DEFINE (with-locked-object OBJECT PROCEDURE)
          (WITH-THREAD-MUTEX-LOCKED (mutex-accessor OBJECT)
            PROCEDURE))))))
