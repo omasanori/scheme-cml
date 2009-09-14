@@ -204,18 +204,17 @@
     (lambda (critical-token)
       ;** Do not beta-reduce -- bug in Scheme48's auto-integrator.
       (let ((continuation
-             ((with-condvar-locked condvar
-                (lambda ()
-                  (if (condvar.priority condvar)
-                      (lambda () (lambda () (values)))
-                      (let ((waiters (condvar.waiters condvar)))
-                        (set-condvar.waiters! condvar #f)
-                        (lambda ()
-                          (for-each
-                           (lambda (waiter)
-                             (maybe-resume waiter (lambda () (values))))
-                           waiters)
-                          (lambda () (values))))))))))
+             (with-condvar-locked condvar
+               (lambda ()
+                 (if (condvar.priority condvar)
+                     (lambda () (values))
+                     (let ((waiters (condvar.waiters condvar)))
+                       (set-condvar.waiters! condvar #f)
+                       (lambda ()
+                         (for-each
+                          (lambda (waiter)
+                            (maybe-resume waiter (lambda () (values))))
+                          waiters))))))))
         (exit-critical-section critical-token continuation)))))
 
 (define (condvar-prv condvar)

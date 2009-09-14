@@ -50,20 +50,19 @@
     (lambda (critical-token)
       ;** Do not beta-reduce -- bug in Scheme48's auto-integrator.
       (let ((continuation
-             ((with-placeholder-locked placeholder
-                (lambda ()
-                  (if (placeholder.priority placeholder)
-                      (lambda ()
-                        (error "Placeholder is already assigned:" placeholder))
-                      (let ((waiters
-                             (placeholder.waiters-then-value placeholder)))
-                        (set-placeholder.waiters-then-value! placeholder value)
-                        (set-placeholder.priority! placeholder 1)
-                        (lambda ()
-                          (for-each (lambda (waiter)
-                                      (maybe-resume waiter (lambda () value)))
-                                    waiters)
-                          (lambda () (values))))))))))
+             (with-placeholder-locked placeholder
+               (lambda ()
+                 (if (placeholder.priority placeholder)
+                     (lambda ()
+                       (error "Placeholder is already assigned:" placeholder))
+                     (let ((waiters
+                            (placeholder.waiters-then-value placeholder)))
+                       (set-placeholder.waiters-then-value! placeholder value)
+                       (set-placeholder.priority! placeholder 1)
+                       (lambda ()
+                         (for-each (lambda (waiter)
+                                     (maybe-resume waiter (lambda () value)))
+                                   waiters))))))))
         (exit-critical-section critical-token continuation)))))
 
 (define (placeholder-value placeholder)
