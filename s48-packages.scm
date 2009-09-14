@@ -55,13 +55,14 @@
   (open time (subset threads-internal (register-dozer!)))
   (files s48-time))
 
-(define-structure primitive-rendezvous primitive-rendezvous-interface
+(define-structures ((primitive-rendezvous primitive-rendezvous-interface)
+                    (resumption resumption-interface))
   (open scheme
         critical-sections
         sorting
-        suspension
         srfi-1                          ;list-lib
         srfi-9                          ;define-record-type
+        suspenders
         )
   (optimize auto-integrate)
   (begin

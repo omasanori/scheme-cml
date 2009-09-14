@@ -100,13 +100,15 @@
     exit-critical-section
     ))
 
-(define-interface suspension-interface
-  (export suspend))
-
-(define-interface resumption-interface
+(define-interface suspenders-interface
   (export
-    maybe-resume
-    with-suspension-claimed
+    make-suspender
+    suspender/lock
+    suspender/resume
+    suspender/resumed?
+    suspender/suspend
+    suspender/unlock
+    suspender?
     ))
 
 (define-interface locked-record-types-interface
@@ -123,6 +125,12 @@
     primitive-poll
     primitive-synchronize
     prv?
+    ))
+
+(define-interface resumption-interface
+  (export
+    with-suspension-claimed
+    maybe-resume
     ))
 
 ;;; This is here because compound interfaces cannot have forward
