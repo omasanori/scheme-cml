@@ -142,6 +142,7 @@
                     (resumption/pessimistic resumption-interface))
   (open scheme
         cells
+        interrupts
         locks
         proposals
         srfi-9                          ;define-record-type
