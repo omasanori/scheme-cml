@@ -206,15 +206,16 @@
       (let ((continuation
              (with-condvar-locked condvar
                (lambda ()
-                 (if (condvar.priority condvar)
-                     (lambda () (values))
-                     (let ((waiters (condvar.waiters condvar)))
-                       (set-condvar.waiters! condvar #f)
-                       (lambda ()
-                         (for-each
-                          (lambda (waiter)
-                            (maybe-resume waiter (lambda () (values))))
-                          waiters))))))))
+                 (let ((waiters (condvar.waiters condvar)))
+                   (if (condvar.priority condvar)
+                       (lambda () (values))
+                       (begin (set-condvar.priority! condvar 1)
+                              (set-condvar.waiters! condvar #f)
+                              (lambda ()
+                                (for-each
+                                 (lambda (waiter)
+                                   (maybe-resume waiter (lambda () (values))))
+                                 waiters)))))))))
         (exit-critical-section critical-token continuation)))))
 
 (define (condvar-prv condvar)
