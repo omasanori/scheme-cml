@@ -79,14 +79,19 @@ parameters:
     (DEQUEUE! <queue>) -> element
 
 - Critical sections and suspending & resuming threads.  See
-  mit-mutex-suspend.scm for a prototypical implementation.
-  [SIGNAL-THREAD-EVENT has the effect of resuming a suspended thread.]
+  srfi-18-suspend.scm for a prototypical implementation.
 
-- Locked record access.  See s48-pessimistic-record.scm for a
-  prototypical implementation.
+- Locked record access.  See srfi-18-record.scm for a prototypical
+  implementation.  Beware:  Some Scheme systems have broken hygienic
+  macro engines that fail to hygienically rename top-level bindings, so
+  that DEFINE-LOCKED-RECORD-TYPE as defined in srfi-18-record.scm may
+  spuriously define variables named %CONSTRUCTOR and OBJECT.MUTEX at
+  the top level, each use of DEFINE-LOCKED-RECORD-TYPE clobbering the
+  previous definitions.  See mit-mutex-syntax.scm for an example of how
+  to work around that.
 
-- Timer rendezvous.  See mit-time.scm and s48-time.scm for prototypical
-  implementations.
+- Timer rendezvous.  See mit-time.scm, s48-time.scm, or
+  srfi-18-time.scm for prototypical implementations.
 
 Additionally, Scheme-CML code uses the following SRFIs:
 
