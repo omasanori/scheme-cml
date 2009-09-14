@@ -104,7 +104,10 @@
   (export suspend))
 
 (define-interface resumption-interface
-  (export maybe-resume))
+  (export
+    maybe-resume
+    with-suspension-claimed
+    ))
 
 (define-interface locked-record-types-interface
   (export
