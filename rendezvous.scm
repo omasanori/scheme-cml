@@ -185,8 +185,8 @@
 ;;; the term, but this is the unfortunate term that Reppy &c. chose for
 ;;; the mechanism of signalling negative acknowledgements.
 
-;;; To reduce the amount of code, we could replace condvars altogether
-;;; by placeholders, which are currently implemented separately.
+;;; These are different from placeholders only in that they can be set
+;;; more than once to no effect.
 
 (define-locked-record-type <condvar>
     (%make-condvar priority waiters)
