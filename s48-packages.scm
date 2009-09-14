@@ -121,8 +121,11 @@
                     (resumption/optimistic resumption-interface))
   (open scheme
         cells
+        ;; CURRENT-PROPOSAL is used only for sanity checks.
+        (subset low-proposals (current-proposal))
         proposals
         srfi-9                          ;define-record-type
+        srfi-23                         ;error
         threads
         threads-internal
         )
