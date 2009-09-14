@@ -33,40 +33,6 @@
 ;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-(define-record-type <suspension>
-    (make-suspension token composition)
-    suspension?
-  (token suspension.token)
-  (composition suspension.composition))
-
-(define-record-type <suspension-token>
-    (%make-suspension-token lock cell-then-thunk uid)
-    suspension-token?
-  (lock suspension-token.lock)
-  (cell-then-thunk suspension-token.cell-then-thunk
-                   set-suspension-token.cell-then-thunk!)
-  (uid suspension-token.uid))
-
-(define (make-suspension-token)
-  (%make-suspension-token (make-lock)
-                          (make-cell (current-thread))
-                          (new-suspension-uid)))
-
-(define *suspension-uid* 0)
-(define suspension-uid-lock (make-lock))
-
-(define (new-suspension-uid)
-  (with-lock suspension-uid-lock
-    (lambda ()
-      (let ((uid *suspension-uid*))
-        (set! *suspension-uid* (+ uid 1))
-        uid))))
-
-(define (reset-suspension-uid)
-  (with-lock suspension-uid-lock
-    (lambda ()
-      (set! *suspension-uid* 0))))
-
 (define (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
 
@@ -74,66 +40,48 @@
   critical-token                        ;ignore
   (continuation))
 
-(define (suspend critical-token procedure)
-  critical-token                        ;ignore
-  (let ((token (make-suspension-token)))
-    ((with-lock (suspension-token.lock token)
-       (lambda ()
-         (procedure
-          (lambda (composition)
-            (make-suspension token composition))
-          (lambda ()
-            (let ((cell (suspension-token.cell-then-thunk token)))
-              (let loop ()
-                ;; Disabling interrupts makes lock-and-block atomic.
-                (let ((interrupts (set-enabled-interrupts! no-interrupts)))
-                  (release-lock (suspension-token.lock token))
-                  (block cell)
-                  (set-enabled-interrupts! interrupts)
-                  (obtain-lock (suspension-token.lock token))
-                  (let ((cell-then-thunk
-                         (suspension-token.cell-then-thunk token)))
-                    (if (cell? cell-then-thunk)
-                        (loop)
-                        cell-then-thunk))))))
-          (lambda (continuation)
-            continuation)))))))
-
-(define (maybe-resume suspension thunk)
-  (let ((token (suspension.token suspension)))
-    (with-lock (suspension-token.lock token)
-      (lambda ()
-        (let ((cell-then-thunk (suspension-token.cell-then-thunk token)))
-          (if (cell? cell-then-thunk)
-              (begin
-                (set-suspension-token.cell-then-thunk!
-                 token
-                 (let ((composition (suspension.composition suspension)))
-                   (lambda ()
-                     (composition thunk))))
-                (make-ready cell-then-thunk)
-                #t)
-              #f))))))
+(define-record-type <suspender>
+    (%make-suspender lock cell set? value)
+    suspender?
+  (lock suspender.lock)
+  (cell suspender.cell)
+  (set? suspender.set? set-suspender.set?!)
+  (value suspender.value set-suspender.value!))
 
-(define (with-suspension-claimed suspension if-claimed if-not-claimed)
-  (let ((token (suspension.token suspension)))
-    (obtain-lock (suspension-token.lock token))
-    (let ((cell-then-thunk (suspension-token.cell-then-thunk token)))
-      (if (cell? cell-then-thunk)
-          (if-claimed
-           (let ((composition (suspension.composition suspension)))
-             (lambda (thunk)
-               (set-suspension-token.cell-then-thunk!
-                token
-                (lambda ()
-                  (composition thunk)))
-               (make-ready cell-then-thunk)
-               (release-lock (suspension-token.lock token))))
-           (lambda ()
-             (release-lock (suspension-token.lock token))))
-          (begin
-            (release-lock (suspension-token.lock token))
-            (if-not-claimed))))))
+(define (make-suspender)
+  (%make-suspender (make-lock) (make-cell (current-thread)) #f #f))
+
+(define (suspender/lock suspender)
+  (obtain-lock (suspender.lock suspender)))
+
+(define (suspender/unlock suspender)
+  (release-lock (suspender.lock suspender)))
+
+(define (suspender/resumed? suspender)
+  (suspender.set? suspender))
+
+(define (suspender/resume suspender value)
+  (set-suspender.set?! suspender #t)
+  (set-suspender.value! suspender value)
+  (make-ready (suspender.cell suspender)))
+
+(define (suspender/suspend critical-token suspender)
+  critical-token                        ;ignore
+  (let loop ()
+    (release-lock-and-block (suspender.lock suspender)
+                            (suspender.cell suspender))
+    (obtain-lock (suspender.lock suspender))
+    (if (suspender.set? suspender)
+        (let ((value (suspender.value suspender)))
+          (set-suspender.value! suspender #f)
+          value)
+        (loop))))
+
+(define (release-lock-and-block lock cell)
+  (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+    (release-lock lock)
+    (block cell)
+    (set-enabled-interrupts! interrupts)))
 
 (define (block cell)
   (with-new-proposal (retry)
@@ -145,11 +93,3 @@
     (with-new-proposal (retry)
       (if (not (maybe-commit-and-make-ready thread))
           (retry)))))
-
-;;; For our purposes in this file, this single-value version suffices.
-
-(define (with-lock lock body)
-  (obtain-lock lock)
-  (let ((result (body)))
-    (release-lock lock)
-    result))

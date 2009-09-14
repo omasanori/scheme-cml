@@ -137,8 +137,7 @@
   (files s48-optimistic-record))
 
 (define-structures ((critical-sections/pessimistic critical-sections-interface)
-                    (suspension/pessimistic suspension-interface)
-                    (resumption/pessimistic resumption-interface))
+                    (suspenders/pessimistic suspenders-interface))
   (open scheme
         cells
         interrupts
@@ -191,8 +190,7 @@
 (def locked-record-types locked-record-types/optimistic)
 
 ;; (def critical-sections critical-sections/pessimistic)
-;; (def suspension suspension/pessimistic)
-;; (def resumption resumption/pessimistic)
+;; (def suspenders suspenders/pessimistic)
 ;; (def locked-record-types locked-record-types/pessimistic)
 
 ;; (def critical-sections critical-sections/interrupt)
