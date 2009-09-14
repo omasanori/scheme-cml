@@ -53,6 +53,7 @@
           sleep
           spawn
           suspend
+          with-suspension-claimed
           ))
 
 (define-package (rendezvous primitive)
