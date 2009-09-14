@@ -81,28 +81,28 @@
   critical-token                        ;ignore
   ;; Interrupts are disabled on entry to LOOP so that the action of
   ;; unlocking the suspender and blocking the thread is atomic.
-  (set-enabled-interrupts! no-interrupts)
-  (let loop ()
-    (set-suspender.locked?! suspender #f)
-    ;; BLOCK enables interrupts when it returns.
-    (block (suspender.cell suspender))
-    (let spin ()
-      (let ((interrupts (set-enabled-interrupts! no-interrupts)))
-        (cond ((suspender.locked? suspender)
-               (set-enabled-interrupts! interrupts)
-               (relinquish-timeslice)
-               (spin))
-              ((suspender.set? suspender)
-               (let ((value (suspender.value suspender)))
-                 (set-suspender.value! suspender #f)
-                 (set-enabled-interrupts! interrupts)
-                 value))
-              (else
-               (set-suspender.locked?! suspender #t)
-               ;; Leave interrupts disabled when entering LOOP.  It
-               ;; doesn't matter that we forget what they were -- BLOCK
-               ;; knows what to do.
-               (loop)))))))
+  (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+    (let loop ()
+      (set-suspender.locked?! suspender #f)
+      ;; BLOCK enables interrupts when it returns.
+      (block (suspender.cell suspender))
+      (let spin ()
+        (let ((interrupts* (set-enabled-interrupts! no-interrupts)))
+          (cond ((suspender.locked? suspender)
+                 (set-enabled-interrupts! interrupts*)
+                 (relinquish-timeslice)
+                 (spin))
+                ((suspender.set? suspender)
+                 (let ((value (suspender.value suspender)))
+                   (set-suspender.value! suspender #f)
+                   (set-enabled-interrupts! interrupts)
+                   value))
+                (else
+                 (set-suspender.locked?! suspender #t)
+                 ;; Leave interrupts disabled when entering LOOP.  It
+                 ;; doesn't matter that we forget what they were -- BLOCK
+                 ;; knows what to do.
+                 (loop))))))))
 
 (define (block cell)
   (with-new-proposal (retry)
