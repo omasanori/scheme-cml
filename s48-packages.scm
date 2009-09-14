@@ -178,30 +178,6 @@
         )
   (optimize auto-integrate)
   (files s48-interrupt-record))
-
-(define-structures ((critical-sections/critical critical-sections-interface)
-                    (suspension/critical suspension-interface)
-                    (resumption/critical resumption-interface))
-  (open scheme
-        cells
-        interrupts
-        proposals
-        srfi-9                          ;define-record-type
-        threads
-        threads-internal
-        )
-  (optimize auto-integrate)
-  (files s48-critical-suspend))
-
-(define-structure locked-record-types/critical locked-record-types-interface
-  (open scheme
-        bitwise
-        interrupts
-        srfi-9                          ;define-record-type
-        srfi-23                         ;error
-        )
-  (optimize auto-integrate)
-  (files s48-critical-record))
 
 ;;;;; Parameter Selection
 
@@ -221,13 +197,3 @@
 ;; (def suspension suspension/interrupt)
 ;; (def resumption resumption/interrupt)
 ;; (def locked-record-types locked-record-types/interrupt)
-
-;; (def critical-sections critical-sections/critical)
-;; (def suspension suspension/critical)
-;; (def resumption resumption/critical)
-;; (def locked-record-types locked-record-types/critical)
-
-;; (def critical-sections critical-sections/transaction)
-;; (def suspension suspension/transaction)
-;; (def resumption resumption/transaction)
-;; (def locked-record-types locked-record-types/transaction)
