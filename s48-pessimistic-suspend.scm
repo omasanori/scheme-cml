@@ -88,8 +88,10 @@
 
 (define (block cell)
   (with-new-proposal (retry)
-    (if (not (maybe-commit-and-block cell))
-        (retry))))
+    ;; See s48-interrupt-suspend.scm for why we ignore RETRY here.
+    retry                               ;ignore
+    (maybe-commit-and-block cell))
+  (values))
 
 (define (make-ready cell)
   (let ((thread (cell-ref cell)))
