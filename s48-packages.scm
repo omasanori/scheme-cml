@@ -104,7 +104,7 @@
 
 (define-structure rendezvous-semaphores rendezvous-semaphores-interface
   (open scheme
-        queues
+        optimistic-queues
         rendezvous
         rendezvous-channels
         rendezvous-mailboxes
