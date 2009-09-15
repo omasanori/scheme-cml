@@ -34,14 +34,14 @@
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 (declare (usual-integrations))
-
+
 (define-integrable (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
 
 (define-integrable (exit-critical-section critical-token continuation)
   critical-token                        ;ignore
   (continuation))
-
+
 (define-record-type <suspender>
     (%make-suspender thread locked? set? value)
     suspender?
@@ -78,6 +78,9 @@
   (set-suspender.set?! suspender #t)
   (set-suspender.value! suspender value)
   (signal-thread-event (suspender.thread suspender) #t))
+
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
 
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
