@@ -110,6 +110,7 @@
                      ((prv.blocker (car prvs))
                       (make-suspension suspender composition)
                       (lambda (thunk)
+                        (suspender/abort suspender)
                         (lambda ()
                           (composition thunk)))
                       (lambda ()
