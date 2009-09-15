@@ -84,7 +84,7 @@
 (define-structure rendezvous-mailboxes rendezvous-mailboxes-interface
   (open scheme
         locked-record-types
-        queues
+        optimistic-queues
         receiving
         rendezvous
         rendezvous-builder
