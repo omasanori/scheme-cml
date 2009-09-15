@@ -32,14 +32,14 @@
 ;;; WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 ;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+
 (define (enter-critical-section procedure)
   (procedure 'CRITICAL-TOKEN))
 
 (define (exit-critical-section critical-token continuation)
   critical-token                        ;ignore
   (continuation))
-
+
 (define-record-type <suspender>
     (%make-suspender lock cell set? value)
     suspender?
@@ -82,6 +82,8 @@
 
 (define (release-lock-and-block lock cell)
   (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+    ;++ Bug: RELEASE-LOCK is not atomic even with interrupts disabled:
+    ;++ it may let other threads run in the process of readying them.
     (release-lock lock)
     (block cell)
     (set-enabled-interrupts! interrupts)))
