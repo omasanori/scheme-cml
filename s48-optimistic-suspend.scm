@@ -80,6 +80,9 @@
          (maybe-commit-and-make-ready (cell-ref (suspender.cell suspender))))
         (retry))))
 
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
+
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
   (error-if-current-proposal)
