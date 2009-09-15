@@ -67,6 +67,9 @@
   (set-suspender.value! suspender value)
   (signal-thread-event (suspender.thread suspender) #t))
 
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
+
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
   (let loop ()
