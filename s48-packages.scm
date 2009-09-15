@@ -74,7 +74,7 @@
 (define-structure rendezvous-channels rendezvous-channels-interface
   (open scheme
         locked-record-types
-        queues
+        optimistic-queues
         rendezvous
         rendezvous-builder
         )
