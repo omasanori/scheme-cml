@@ -103,6 +103,7 @@
 (define-interface suspenders-interface
   (export
     make-suspender
+    suspender/abort
     suspender/lock
     suspender/resume
     suspender/resumed?
