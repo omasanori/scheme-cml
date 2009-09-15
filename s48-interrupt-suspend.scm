@@ -88,21 +88,19 @@
       (block (suspender.cell suspender))
       (let spin ()
         (let ((interrupts* (set-enabled-interrupts! no-interrupts)))
-          (cond ((suspender.locked? suspender)
-                 (set-enabled-interrupts! interrupts*)
-                 (relinquish-timeslice)
-                 (spin))
-                ((suspender.set? suspender)
-                 (let ((value (suspender.value suspender)))
-                   (set-suspender.value! suspender #f)
-                   (set-enabled-interrupts! interrupts)
-                   value))
-                (else
-                 (set-suspender.locked?! suspender #t)
-                 ;; Leave interrupts disabled when entering LOOP.  It
-                 ;; doesn't matter that we forget what they were -- BLOCK
-                 ;; knows what to do.
-                 (loop))))))))
+          (if (suspender.locked? suspender)
+              (begin
+                (set-enabled-interrupts! interrupts*)
+                (relinquish-timeslice)
+                (spin))
+              (set-suspender.locked?! suspender #t))))
+      ;; Suspender is locked and interrupts are disabled.
+      (if (suspender.set? suspender)
+          (let ((value (suspender.value suspender)))
+            (set-suspender.value! suspender #f)
+            (set-enabled-interrupts! interrupts)
+            value)
+          (loop)))))
 
 (define (block cell)
   (with-new-proposal (retry)
