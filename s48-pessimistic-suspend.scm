@@ -65,6 +65,9 @@
   (set-suspender.value! suspender value)
   (make-ready (suspender.cell suspender)))
 
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
+
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
   (let loop ()
