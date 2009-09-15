@@ -114,6 +114,14 @@
         )
   (optimize auto-integrate)
   (files semaphore))
+
+;;; Correct bugs in Scheme48's queues.  (Unfortunately, they're what
+;;; Scheme48's run-time system uses -- eeeek!)
+
+(define-structure optimistic-queues (interface-of queues)
+  (open scheme proposals srfi-23)
+  (optimize auto-integrate)
+  (files s48-optimistic-queue))
 
 ;;;; Parameters
 
