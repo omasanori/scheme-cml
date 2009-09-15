@@ -67,6 +67,9 @@
   ;; will ever be waiting on the condition variable.
   (condition-variable-broadcast! (suspender.condvar suspender)))
 
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
+
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
   (let loop ()
