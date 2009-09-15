@@ -107,8 +107,18 @@
 
 (define (block cell)
   (with-new-proposal (retry)
-    (if (not (maybe-commit-and-block cell))
-        (retry))))
+    ;; This proposal should not fail, because it doesn't do anything.
+    ;; If it does fail, we just pretend that some thread woke us, and
+    ;; the caller is expected to check whatever condition we were
+    ;; waiting for, and retry blocking if the condition was not set.
+    ;; The reason we can't use RETRY is that MAYBE-COMMIT-AND-BLOCK
+    ;; re-enables interrupts if it fails, so that another thread might
+    ;; swoop in, set the condition, and try to make this thread ready
+    ;; before this thread has even blocked.  Then this thread would
+    ;; block with nobody to make it ready.
+    retry                               ;ignore
+    (maybe-commit-and-block cell))
+  (values))
 
 (define (make-ready cell)
   (let ((thread (cell-ref cell)))
