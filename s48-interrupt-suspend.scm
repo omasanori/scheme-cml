@@ -77,6 +77,9 @@
   (set-suspender.value! suspender value)
   (make-ready (suspender.cell suspender)))
 
+(define (suspender/abort suspender)
+  (set-suspender.set?! suspender #t))
+
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
   ;; Interrupts are disabled on entry to LOOP so that the action of
