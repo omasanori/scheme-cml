@@ -59,8 +59,13 @@
           ;; Spin the transaction.
           (begin
             (invalidate-current-proposal!)
-            (relinquish-timeslice))
-          (set-suspender.locked?! suspender #t)))))
+            (relinquish-timeslice)))
+      ;; For the current transaction, give the simulacrum of having
+      ;; acquired it, as SUSPENDER/LOCK is supposed to guarantee.  Of
+      ;; course, this effect will never be made global if someone else
+      ;; already held the lock, as INVALIDATE-CURRENT-PROPOSAL! will
+      ;; guarantee.
+      (set-suspender.locked?! suspender #t))))
 
 (define (suspender/unlock suspender)
   ;; Ensuring atomicity here is probably superfluous.
