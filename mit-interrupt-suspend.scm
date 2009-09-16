@@ -84,20 +84,26 @@
 
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
-  (let loop ()
-    (let ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok)))
+  ;; Interrupts must be enabled on entry to LOOP, so that unlocking the
+  ;; suspender and suspending happen atomically.  We could instead
+  ;; block thread events, but we also need interrupts disabled in order
+  ;; to lock the suspender again.  Since SUSPEND-CURRENT-THREAD and
+  ;; YIELD-CURRENT-THREAD let other threads run but save and restore
+  ;; the interrupt mask to whatever it was on entry, it is convenient
+  ;; just to save the interrupt mask at the beginning and restore it at
+  ;; the very end, and not fiddle with it in the middle.
+  (let ((interrupt-mask (set-interrupt-enables! interrupt-mask/gc-ok)))
+    (let loop ()
       (set-suspender.locked?! suspender #f)
       (suspend-current-thread)
       (let spin ()
-        (cond ((suspender.locked? suspender)
-               (set-interrupt-enables! interrupt-mask)
-               (yield-current-thread)
-               (spin))
-              ((suspender.set? suspender)
-               (let ((value (suspender.value suspender)))
-                 (set-suspender.value! suspender #f)
-                 (set-interrupt-enables! interrupt-mask)
-                 value))
-              (else
-               (set-interrupt-enables! interrupt-mask)
-               (loop)))))))
+        (if (suspender.locked? suspender)
+            (begin (yield-current-thread)
+                   (spin))
+            (set-suspender.locked?! suspender #t)))
+      (if (suspender.set? suspender)
+          (let ((value (suspender.value suspender)))
+            (set-suspender.value! suspender #f)
+            (set-interrupt-enables! interrupt-mask)
+            value)
+          (loop)))))
