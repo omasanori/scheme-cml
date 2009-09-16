@@ -92,25 +92,26 @@
       (if (not (maybe-commit-and-block (suspender.cell suspender)))
           (retry)))
     ((with-new-proposal (retry)
-       (cond ((suspender.locked? suspender)
-              ;; Spin the transaction.  Invalidating the proposal is
-              ;; not necessary -- we can just discard it altogether.
-              ;; On a multiprocessor system, we ought instead to record
-              ;; who owns the lock, and to relinquish our time slice
-              ;; only if the owner is on the same processor.
-              (relinquish-timeslice)
-              (retry))
-             ((suspender.set? suspender)
-              (let ((value (suspender.value suspender)))
-                (set-suspender.value! suspender #f)
-                (if (maybe-commit)
-                    (lambda () value)
-                    (retry))))
-             (else
-              (set-suspender.locked?! suspender #t)
-              (if (maybe-commit)
-                  loop
-                  (retry))))))))
+       (if (suspender.locked? suspender)
+           (begin
+             ;; Spin the transaction.  Invalidating the proposal is not
+             ;; necessary -- we can just discard it altogether.  On a
+             ;; multiprocessor system, we ought instead to record who
+             ;; owns the lock, and to relinquish our time slice only if
+             ;; the owner is on the same processor.
+             (relinquish-timeslice)
+             (retry))
+           (begin
+             (set-suspender.locked?! suspender #t)
+             (if (suspender.set? suspender)
+                 (let ((value (suspender.value suspender)))
+                   (set-suspender.value! suspender #f)
+                   (if (maybe-commit)
+                       (lambda () value)
+                       (retry)))
+                 (if (maybe-commit)
+                     loop
+                     (retry)))))))))
 
 (define (error-if-current-proposal)
   (if (current-proposal)
