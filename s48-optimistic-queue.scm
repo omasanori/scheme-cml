@@ -181,15 +181,16 @@
   (delete-from-queue-if! queue (lambda (element*) (eq? element* element))))
 
 (define (delete-from-queue-if! queue predicate)
-  (call-ensuring-atomicity!
+  (call-ensuring-atomicity
     (let ((front (queue.front queue)))
       (lambda ()
         (let loop ((pair front))
           (let ((tail (provisional-cdr pair)))
             (if (pair? tail)
                 (if (predicate (car tail))
-                    (copy-cdr! pair tail queue)
-                    (loop tail)))))))))
+                    (begin (copy-cdr! pair tail queue) #t)
+                    (loop tail))
+                #f)))))))
 
 (define (queue-length queue)
   (call-ensuring-atomicity
@@ -212,46 +213,43 @@
                  (loop tail (cons (car tail) list))
                  list))))))))
 
-(define (queue->list! queue)
-  (call-ensuring-atomicity
-    (let ((front (queue.front queue)))
-      (lambda ()
-        (let ((list (provisional-cdr front)))
-          (nullify-cdr! front queue)
-          list)))))
+;;; Which of these exhibits the intended behaviour of LIST->QUEUE?
+;;; Generally, you will probably want to do something like
+;;;
+;;;   (nonprovisional-list->queue (provisional-cell-ref list-cell))
+;;;
+;;; rather than use PROVISIONAL-LIST->QUEUE.
 
-(define (list->queue list)
-  (if (pair? list)
-      (let ((front (cons 'SENTINEL '())))
-        (let loop ((pair front) (list list))
-          (if (pair? list)
-              ;; Using SET-CDR! here is safe: these are strictly local
-              ;; effects, not visible to any thread but the current one
-              ;; until LIST->QUEUE returns.  But CAR and CDR mean you
-              ;; can't pass in a list undergoing concurrent update.
-              (let ((tail (cons (car list) '())))
-                (set-cdr! pair tail)
-                (loop tail (cdr list)))))
-        (%make-queue front front))
-      (make-queue)))
+(define (nonprovisional-list->queue list)
+  (let ((front (cons 'SENTINEL '())))
+    (let loop ((back front) (list list))
+      (if (pair? list)
+          (let ((back* (cons (car list) '())))
+            ;; Using SET-CDR! here is safe: these are strictly local
+            ;; effects, not visible to any thread but the current one
+            ;; until LIST->QUEUE returns.  But CAR and CDR mean you
+            ;; can't pass in a list undergoing concurrent update.
+            (set-cdr! back back*)
+            (loop back* (cdr list)))
+          (%make-queue front back)))))
 
 (define (provisional-list->queue list)
-  (if (pair? list)
+  (call-ensuring-atomicity
+    (lambda ()
+      ;; Creating FRONT inside the transaction rather than outside is
+      ;; not strictly necessary: when we repeat the transaction, we
+      ;; shall clobber its cdr anyway.  But this feels less sketchy.
       (let ((front (cons 'SENTINEL '())))
-        (call-ensuring-atomicity!
-          (lambda ()
-            (let loop ((pair front) (list list))
-              (if (pair? list)
-                  ;; Using SET-CDR! here is safe, as above.  But we use
-                  ;; PROVISIONAL-CxR instead of CxR, to make it safe to
-                  ;; use PROVISIONAL-LIST->QUEUE on a list undergoing
-                  ;; concurrent update.
-                  (let ((tail (cons (provisional-car list) '())))
-                    (set-cdr! pair tail)
-                    (loop tail (provisional-cdr list)))))))
-        (%make-queue front front))
-      (make-queue)))
+        (let loop ((back front) (list list))
+          (if (pair? list)
+              (let ((back* (cons (provisional-car list) '())))
+                ;; Using SET-CDR! here is safe, as above.  But we use
+                ;; PROVISIONAL-CxR instead of CxR, to make it safe to
+                ;; use PROVISIONAL-LIST->QUEUE on a list undergoing
+                ;; concurrent update.
+                (set-cdr! back back*)
+                (loop back* (provisional-cdr list)))
+              (%make-queue front back)))))))
 
-(define (list->queue! list)
-  (let ((front (cons 'SENTINEL list)))
-    (%make-queue front front)))
+(define (list->queue list)
+  (provisional-list->queue list))
