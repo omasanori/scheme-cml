@@ -54,16 +54,16 @@
 
 ;;; This definition looks as though it should be equivalent to the
 ;;; actual one, but it's not.  The problem is not that it lacks a
-;;; transaction (neither definition requires a transaction -- each one
-;;; reads from only one location, and Scheme48 guarantees individual
-;;; reads to be atomic), but that someone may set the cdr of the back
-;;; pair after we said that the queue was nonempty.  Although this
-;;; would cause any transaction using QUEUE-EMPTY? to be restarted
-;;; later on, control may never get to the end of that transaction,
-;;; because it might next call DEQUEUE!, which signals an error if the
-;;; queue is empty -- by testing whether the cdr of the front pair is
-;;; null.  So it's better to use the same test that DEQUEUE! relies on,
-;;; rather than one that looks equivalent.
+;;; transaction (neither definition needs a transaction -- each one
+;;; reads only once and from only one mutable location, and Scheme48
+;;; guarantees individual reads to be isolated), but that someone may
+;;; set the cdr of the back pair after we said that the queue was
+;;; nonempty.  Although this would cause any transaction using
+;;; QUEUE-EMPTY? to be restarted later on, control may never get to the
+;;; end of that transaction, because it might next call DEQUEUE!, which
+;;; signals an error if the queue is empty -- by testing whether the
+;;; cdr of the front pair is null.  So it's better to use the same test
+;;; that DEQUEUE! relies on, rather than one that looks equivalent.
 
 ;; (define (queue-empty? queue)
 ;;   (eq? (queue.front queue)
@@ -71,7 +71,7 @@
 
 (define (queue-empty? queue)
   ;; No need for a transaction: a single PROVISIONAL-CDR is always
-  ;; atomic.
+  ;; isolated.
   (null? (provisional-cdr (queue.front queue))))
 
 (define (queue-head queue)
