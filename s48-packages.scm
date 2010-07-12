@@ -152,6 +152,7 @@
         locks
         proposals
         srfi-9                          ;define-record-type
+        srfi-23                         ;error
         threads
         threads-internal
         )
