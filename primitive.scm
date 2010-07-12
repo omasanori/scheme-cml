@@ -116,6 +116,9 @@
                       (lambda ()
                         (loop (cdr prvs))))))))))))))
 
+;;; Important: You cannot use MAYBE-RESUME while an object is locked.
+;;; This is because MAYBE-RESUME has effects other than on the object.
+
 (define (maybe-resume suspension thunk)
   (let ((suspender (suspension.suspender suspension))
         (composition (suspension.composition suspension)))
