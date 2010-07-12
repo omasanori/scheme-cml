@@ -3,7 +3,7 @@
 ;;;; Concurrent ML for Scheme
 ;;;; SRFI 18: Thread Suspension
 
-;;; Copyright (c) 2009, Taylor R. Campbell
+;;; Copyright (c) 2009, 2010, Taylor R. Campbell
 ;;;
 ;;; Redistribution and use in source and binary forms, with or without
 ;;; modification, are permitted provided that the following conditions
