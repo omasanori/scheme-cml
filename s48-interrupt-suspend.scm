@@ -41,69 +41,104 @@
   (continuation))
 
 (define-record-type <suspender>
-    (%make-suspender cell locked? set? value)
+    (%make-suspender cell owner state)
     suspender?
   (cell suspender.cell)
-  (locked? suspender.locked? set-suspender.locked?!)
-  (set? suspender.set? set-suspender.set?!)
-  (value suspender.value set-suspender.value!))
+  (owner suspender.owner set-suspender.owner!)
+  ;; Possible values of the state field:
+  ;;   #f -> aborted or already used
+  ;;   <thread> -> waiting, if alive
+  ;;   (<value>) -> resumed with <value>
+  (state suspender.state set-suspender.state!))
 
 (define (make-suspender)
-  (%make-suspender (make-cell (current-thread)) #f #f #f))
+  (%make-suspender (make-cell (current-thread)) #f (current-thread)))
+
+(define (assert-suspender-lock suspender)
+  (let ((me (current-thread)))
+    (if (not (eq? me (suspender.owner suspender)))
+        (error "I don't have this suspender locked:" suspender me))))
+
+(define (live-thread? object)
+  (and (thread? object)
+       (or (thread-continuation object)
+           (running? object))
+       #t))
+
+(define (suspender/locked? suspender)
+  (live-thread? (suspender.owner suspender)))
+
+;;; Important: SUSPENDER/LOCK locks the suspender even if it was locked
+;;; by a thread that has terminated.  Thus, we must keep the suspender
+;;; in a consistent state even while it is locked.
 
 (define (suspender/lock suspender)
-  (let spin ()
-    (let ((interrupts (set-enabled-interrupts! no-interrupts)))
-      (if (suspender.locked? suspender)
-          (begin
-            (set-enabled-interrupts! interrupts)
-            (relinquish-timeslice)
-            (spin))
-          (begin
-            (set-suspender.locked?! suspender #t)
-            (set-enabled-interrupts! interrupts))))))
+  (let ((me (current-thread)))
+    (if (eq? me (suspender.owner suspender))
+        (error "I already have this suspender locked:" suspender me))
+    (let spin ()
+      (let ((interrupts (set-enabled-interrupts! no-interrupts)))
+        (if (suspender/locked? suspender)
+            (begin
+              (set-enabled-interrupts! interrupts)
+              (relinquish-timeslice)
+              (spin))
+            (begin
+              (set-suspender.owner! suspender me)
+              (set-enabled-interrupts! interrupts)))))))
 
 (define (suspender/unlock suspender)
+  (assert-suspender-lock suspender)
   ;; Disabling interrupts here is probably superfluous.
   (let ((interrupts (set-enabled-interrupts! no-interrupts)))
-    (set-suspender.locked?! suspender #f)
+    (set-suspender.owner! suspender #f)
     (set-enabled-interrupts! interrupts)))
-
+
 (define (suspender/resumed? suspender)
-  (suspender.set? suspender))
+  (assert-suspender-lock suspender)
+  (not (live-thread? (suspender.state suspender))))
 
 (define (suspender/resume suspender value)
-  (set-suspender.set?! suspender #t)
-  (set-suspender.value! suspender value)
-  (make-ready (suspender.cell suspender)))
+  (assert-suspender-lock suspender)
+  ;; The order of actions here is important.  It is safe to make the
+  ;; suspended thread ready before we have updated the state -- that
+  ;; thread won't try to read the state until we unlock the suspender.
+  ;; But if we updated the state first and were interrupted before we
+  ;; got a chance to make the suspended thread ready, then the
+  ;; suspender would be set, and the suspended thread would never know.
+  (make-ready (suspender.cell suspender))
+  (set-suspender.state! suspender (list value)))
 
 (define (suspender/abort suspender)
-  (set-suspender.set?! suspender #t))
+  (assert-suspender-lock suspender)
+  (set-suspender.state! suspender #f))
 
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
+  (assert-suspender-lock suspender)
   ;; Interrupts are disabled on entry to LOOP so that the action of
   ;; unlocking the suspender and blocking the thread is atomic.
   (let ((interrupts (set-enabled-interrupts! no-interrupts)))
     (let loop ()
-      (set-suspender.locked?! suspender #f)
+      (set-suspender.owner! suspender #f)
       ;; BLOCK enables interrupts when it returns.
       (block (suspender.cell suspender))
       (let spin ()
         (let ((interrupts* (set-enabled-interrupts! no-interrupts)))
-          (if (suspender.locked? suspender)
+          (if (suspender/locked? suspender)
               (begin
                 (set-enabled-interrupts! interrupts*)
                 (relinquish-timeslice)
                 (spin))
-              (set-suspender.locked?! suspender #t))))
+              (set-suspender.owner! suspender (current-thread)))))
       ;; Suspender is locked and interrupts are disabled.
-      (if (suspender.set? suspender)
-          (let ((value (suspender.value suspender)))
-            (set-suspender.value! suspender #f)
-            (set-enabled-interrupts! interrupts)
-            value)
-          (loop)))))
+      (let ((state (suspender.state suspender)))
+        (cond ((pair? state)
+               (set-suspender.state! suspender #f)
+               (set-enabled-interrupts! interrupts)
+               (car state))
+              ((eq? state (current-thread)) (loop)) ;Sanity check.
+              (else (error "Suspender reused or aborted:" suspender)))))))
 
 (define (block cell)
   (with-new-proposal (retry)

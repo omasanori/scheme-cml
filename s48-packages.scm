@@ -184,6 +184,7 @@
   (open scheme
         interrupts
         srfi-9                          ;define-record-type
+        srfi-23                         ;error
         )
   (optimize auto-integrate)
   (files s48-interrupt-record))
