@@ -43,35 +43,70 @@
   (continuation))
 
 (define-record-type <suspender>
-    (%make-suspender thread thread-mutex set? value)
+    (%make-suspender thread-mutex state)
     suspender?
-  (thread suspender.thread)
   (thread-mutex suspender.thread-mutex)
-  (set? suspender.set? set-suspender.set?!)
-  (value suspender.value set-suspender.value!))
+  ;; Possible values of the state field:
+  ;;   #f -> waiting
+  ;;   #t -> aborted or already used
+  ;;   (<value>) -> resumed with <value>
+  (state suspender.state set-suspender.state!))
 
 (define (make-suspender)
-  (%make-suspender (current-thread) (make-thread-mutex) #f #f))
+  (%make-suspender (make-thread-mutex) (current-thread)))
+
+(define (assert-suspender-lock suspender)
+  (let ((me (current-thread)))
+    (if (not (eq? me (thread-mutex-owner (suspender.thread-mutex suspender))))
+        (error "I don't have this suspender locked:" suspender me))))
+
+(define (live-thread? object)
+  (and (thread? object)
+       (not (thread-dead? object))))
+
+;;; Important: SUSPENDER/LOCK locks the suspender even if it was locked
+;;; by a thread that has terminated.  Thus, we must keep the suspender
+;;; in a consistent state even while it is locked.
 
 (define (suspender/lock suspender)
+  (let ((me (current-thread)))
+    (if (eq? me (thread-mutex-owner (suspender.thread-mutex suspender)))
+        (error "I already have this suspender locked:" suspender me)))
+  ;; Upon termination, a thread loses ownership of all its mutices, so
+  ;; we need do nothing special to force locking the mutex.
   (lock-thread-mutex (suspender.thread-mutex suspender)))
 
 (define (suspender/unlock suspender)
+  ;; Asserting the lock is not strictly necessary: UNLOCK-THREAD-MUTEX
+  ;; does so for us.  This puts SUSPENDER/UNLOCK in the stack trace.
+  (assert-suspender-lock suspender)
   (unlock-thread-mutex (suspender.thread-mutex suspender)))
-
+
 (define (suspender/resumed? suspender)
-  (suspender.set? suspender))
+  (assert-suspender-lock suspender)
+  (not (live-thread? (suspender.state suspender))))
 
 (define (suspender/resume suspender value)
-  (set-suspender.set?! suspender #t)
-  (set-suspender.value! suspender value)
-  (signal-thread-event (suspender.thread suspender) #t))
+  (assert-suspender-lock suspender)
+  ;; The order of actions here is important.  It is safe to signal the
+  ;; suspended thread before we have updated the state -- that thread
+  ;; won't try to read the state until we unlock the suspender.  But if
+  ;; we updated the state first and were interrupted before we got a
+  ;; chance to signal the suspended thread, then the suspender would be
+  ;; set, and the suspended thread would never know.
+  (let ((thread (suspender.state suspender)))
+    (if (not (thread? thread))          ;++ Check that it's live?
+        (error "Suspender in wrong state:" suspender))
+    (signal-thread-event thread #t))
+  (set-suspender.state! suspender (list value)))
 
 (define (suspender/abort suspender)
-  (set-suspender.set?! suspender #t))
+  (assert-suspender-lock suspender)
+  (set-suspender.state! suspender #f))
 
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
+  (assert-suspender-lock suspender)
   (let loop ()
     (let ((blocked? (block-thread-events)))
       (unlock-thread-mutex (suspender.thread-mutex suspender))
@@ -79,8 +114,7 @@
       (if (not blocked?)
           (unblock-thread-events)))
     (lock-thread-mutex (suspender.thread-mutex suspender))
-    (if (suspender.set? suspender)
-        (let ((value (suspender.value suspender)))
-          (set-suspender.value! suspender #f)
-          value)
-        (loop))))
+    (let ((state (suspender.state suspender)))
+      (cond ((pair? state) (set-suspender.state! suspender #f) (car state))
+            ((eq? state (current-thread)) (loop))
+            (else (error "Suspender reused or aborted:" suspender))))))
