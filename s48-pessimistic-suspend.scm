@@ -41,44 +41,74 @@
   (continuation))
 
 (define-record-type <suspender>
-    (%make-suspender lock cell set? value)
+    (%make-suspender lock cell state)
     suspender?
   (lock suspender.lock)
   (cell suspender.cell)
-  (set? suspender.set? set-suspender.set?!)
-  (value suspender.value set-suspender.value!))
+  ;; Possible values of the state field:
+  ;;   #f -> aborted or already used
+  ;;   <thread> -> waiting, if alive
+  ;;   (<value>) -> resumed with <value>
+  (state suspender.state set-suspender.state!))
 
 (define (make-suspender)
-  (%make-suspender (make-lock) (make-cell (current-thread)) #f #f))
+  (%make-suspender (make-lock) (make-cell (current-thread)) (current-thread)))
+
+(define (assert-suspender-lock suspender)
+  ;; No way to get at the lock.
+  (values))
+
+(define (live-thread? object)
+  (and (thread? object)
+       (or (thread-continuation object)
+           (running? object))
+       #t))
+
+;;; SUSPENDER/LOCK is supposed to lock the suspender even if it was
+;;; locked by a thread that has terminated.  However, we can't do that
+;;; with Scheme48's locks.  See the other suspender implementations for
+;;; comparison.
 
 (define (suspender/lock suspender)
+  ;; Unfortunately, this will block forever if a thread terminated
+  ;; while holding the lock, or if the current thread already has the
+  ;; lock, and there is no way to detect either situation.
   (obtain-lock (suspender.lock suspender)))
 
 (define (suspender/unlock suspender)
+  (assert-suspender-lock suspender)
   (release-lock (suspender.lock suspender)))
-
+
 (define (suspender/resumed? suspender)
-  (suspender.set? suspender))
+  (assert-suspender-lock suspender)
+  (not (live-thread? (suspender.state suspender))))
 
 (define (suspender/resume suspender value)
-  (set-suspender.set?! suspender #t)
-  (set-suspender.value! suspender value)
-  (make-ready (suspender.cell suspender)))
+  (assert-suspender-lock suspender)
+  ;; The order of actions here is important.  It is safe to make the
+  ;; suspended thread ready before we have updated the state -- that
+  ;; thread won't try to read the state until we unlock the suspender.
+  ;; But if we updated the state first and were interrupted before we
+  ;; got a chance to make the suspended thread ready, then the
+  ;; suspender would be set, and the suspended thread would never know.
+  (make-ready (suspender.cell suspender))
+  (set-suspender.state! suspender (list value)))
 
 (define (suspender/abort suspender)
-  (set-suspender.set?! suspender #t))
+  (assert-suspender-lock suspender)
+  (set-suspender.state! suspender #f))
 
 (define (suspender/suspend critical-token suspender)
   critical-token                        ;ignore
+  (assert-suspender-lock suspender)
   (let loop ()
     (release-lock-and-block (suspender.lock suspender)
                             (suspender.cell suspender))
     (obtain-lock (suspender.lock suspender))
-    (if (suspender.set? suspender)
-        (let ((value (suspender.value suspender)))
-          (set-suspender.value! suspender #f)
-          value)
-        (loop))))
+    (let ((state (suspender.state suspender)))
+      (cond ((pair? state) (set-suspender.state! suspender #f) (car state))
+            ((eq? state (current-thread)) (loop))
+            (else (error "Suspender reused or aborted:" suspender))))))
 
 (define (release-lock-and-block lock cell)
   (let ((interrupts (set-enabled-interrupts! no-interrupts)))
