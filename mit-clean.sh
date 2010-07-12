@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -u
+
 OS_TYPES="unx w32 os2"
 PKG_SUFFIXES="crf fre pkd"
 SCM_SUFFIXES="bin ext com bci"
