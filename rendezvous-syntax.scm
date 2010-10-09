@@ -45,4 +45,6 @@
     ((RENDEZVOUS-CASE-CLAUSE (rendezvous => receiver))
      (MAP-RENDEZVOUS rendezvous receiver))
     ((RENDEZVOUS-CASE-CLAUSE (rendezvous body0 body1+ ...))
-     (MAP-RENDEZVOUS rendezvous (LAMBDA IGNORED IGNORED body0 body1+ ...)))))
+     (MAP-RENDEZVOUS rendezvous (LAMBDA IGNORED IGNORED body0 body1+ ...)))
+    ((RENDEZVOUS-CASE-CLAUSE (rendezvous))
+     rendezvous)))
