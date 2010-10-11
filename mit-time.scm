@@ -34,17 +34,22 @@
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 (declare (usual-integrations))
-
+
 (define (after-time-rendezvous duration)
-  (make-time-rendezvous (lambda () duration)))
+  (time-rendezvous (lambda () duration)))
 
 (define (at-real-time-rendezvous time)
-  (make-time-rendezvous (lambda () (- time (real-time-clock)))))
+  (time-rendezvous (lambda () (- time (real-time-clock)))))
 
-(define (make-time-rendezvous compute-suspension-duration)
+(define (time-rendezvous compute-duration)
+  (delayed-rendezvous-with-nack
+   (lambda (nack-rv)
+     (base-time-rendezvous compute-duration nack-rv))))
+
+(define (base-time-rendezvous compute-duration nack-rv)
 
   (define (poll)
-    (if (positive? (compute-suspension-duration))
+    (if (positive? (compute-duration))
         #f
         -1))
 
@@ -53,12 +58,15 @@
     (if-enabled (lambda () (values))))
 
   (define (block suspension if-enabled if-blocked)
-    (let ((suspension-duration (compute-suspension-duration)))
-      (if (positive? suspension-duration)
-          (begin
-            (register-timer-event suspension-duration
-              (lambda ()
-                (maybe-resume suspension (lambda () (values)))))
+    (let ((duration (compute-duration)))
+      (if (positive? duration)
+          (let ((registration
+                 (register-timer-event duration
+                   (lambda ()
+                     (maybe-resume suspension (lambda () (values)))))))
+            (spawn (lambda ()
+                     (synchronize nack-rv)
+                     (deregister-timer-event registration)))
             (if-blocked))
           (if-enabled (lambda () (values))))))
 
